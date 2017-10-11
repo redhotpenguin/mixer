@@ -1,0 +1,39 @@
+# instance configuration for template 'metric'
+apiVersion: "config.istio.io/v1alpha2"
+kind: metric
+metadata:
+ name: requestcount
+ namespace: istio-config-default
+spec:
+ value: "1"
+ dimensions:
+   source: source.labels["app"] | "unknown"
+   target: target.service | "unknown"
+   service: target.labels["app"] | "unknown"
+   method: request.path | "unknown"
+   version: target.labels["version"] | "unknown"
+   response_code: response.code | 200
+ monitored_resource_type: '"UNSPECIFIED"'
+---
+# handler configuration for Adapter 'metric'
+apiVersion: "config.istio.io/v1alpha2"
+kind: circonus
+metadata:
+ name: hndlrTest
+ namespace: istio-config-default
+spec:
+ submission_url: "https://10.20.30.56:43191/module/httptrap/59e7502b-3401-4d05-8862-9a396fab41bf/mys3cr3t"
+---
+# rule to dispatch to your handler
+apiVersion: "config.istio.io/v1alpha2"
+kind: rule
+metadata:
+ name: mysamplerule
+ namespace: istio-config-default
+spec:
+ match: "true"
+ actions:
+ - handler: hndlrTest.circonus
+   instances:
+   - requestcount.metric
+
