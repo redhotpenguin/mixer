@@ -132,6 +132,30 @@ http_file(
 )
 
 go_repository(
+    name = "com_github_circonuslabs_circonus_gometrics",
+    commit = "3be4af140156ebe726078c5b4b04c3a2708e228f", # Oct 2, 2017
+    importpath = "github.com/circonus-labs/circonus-gometrics",
+)
+
+go_repository(
+    name = "com_github_circonus_labs_circonusllhist",
+    commit = "6e85b9352cf0c2bb969831347491388bb3ae9c69", # May 25, 2017
+    importpath = "github.com/circonus-labs/circonusllhist",
+)
+
+go_repository(
+    name = "com_github_hashicorp_go_retryablehttp",
+    commit = "794af36148bf63c118d6db80eb902a136b907e71", # Aug 24, 2017
+    importpath = "github.com/hashicorp/go-retryablehttp",
+)
+
+go_repository(
+    name = "com_github_hashicorp_go_cleanhttp",
+    commit = "3573b8b52aa7b37b9358d966a898feb387f62437", # Feb 10, 2017
+    importpath = "github.com/hashicorp/go-cleanhttp",
+)
+
+go_repository(
     name = "com_github_prometheus_client_golang",
     commit = "c5b7fccd204277076155f10851dad72b76a49317",  # Aug 17, 2016 (v0.8.0)
     importpath = "github.com/prometheus/client_golang",

@@ -27,8 +27,12 @@ message Params {
     // Circonus SubmissionURL to HTTPTrap check
     string submission_url = 1;
 
-    // Describes how to represent this metric in statsd
+    // Describes how to represent this metric
     message MetricInfo {
+
+        // name
+        string name = 1;
+
         // The type of metric.
         enum Type {
             UNKNOWN = 0;
@@ -36,10 +40,10 @@ message Params {
             GAUGE = 2;
             DISTRIBUTION = 3;
         }
-        Type type = 1;
-
-        string name_template = 2;
+        Type type = 2;
     }
 
-    map<string,MetricInfo> metrics = 6;
+    string file_path = 2;
+
+   repeated MetricInfo metrics = 3;
 }
