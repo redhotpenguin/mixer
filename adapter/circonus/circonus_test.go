@@ -31,7 +31,7 @@ func TestNewMetricsAspect(t *testing.T) {
 	name := "SubmissionUrl"
 	conf := &config.Params{
 		SubmissionUrl: "1234",
-		Metrics:       map[string]*config.Params_MetricInfo{"a": {NameTemplate: `{{(.apiMethod) "-" (.responseCode)}}`}},
+		Metrics:       []*config.Params_MetricInfo{{Name: "requestcount", Type: config.COUNTER}},
 	}
 
 	info := GetInfo()
@@ -53,62 +53,6 @@ func TestNewMetricsAspect(t *testing.T) {
 	if !present {
 		t.Errorf("wanted NewMetricsAspect(env, conf, metrics) to log about '%v', only got logs: %v", name, logs)
 	}
-}
-
-func TestNewMetricsAspect_InvalidTemplate(t *testing.T) {
-	name := "invalidTemplate"
-	conf := &config.Params{
-		SubmissionUrl: "1234",
-		Metrics: map[string]*config.Params_MetricInfo{
-			name:      {NameTemplate: `{{ .apiMethod "-" .responseCode }}`}, // fails at execute time, not template parsing time
-			"missing": {NameTemplate: "foo"},
-		},
-	}
-	metrics := map[string]*metric.Type{
-		name: {Dimensions: map[string]descriptor.ValueType{"apiMethod": descriptor.STRING, "responseCode": descriptor.INT64}},
-	}
-	info := GetInfo()
-	b := info.NewBuilder().(*builder)
-	b.SetAdapterConfig(conf)
-	b.SetMetricTypes(metrics)
-	env := test.NewEnv(t)
-	if _, err := b.Build(context.Background(), env); err != nil {
-		t.Errorf("NewMetricsAspect(test.NewEnv(t), conf, metrics) = _, %s, wanted no error", err)
-	}
-
-	logs := env.GetLogs()
-	if len(logs) < 1 {
-		t.Errorf("len(logs) = %d, wanted at least 1 item logged", len(logs))
-	}
-	present := false
-	for _, l := range logs {
-		present = present || strings.Contains(l, name)
-	}
-	if !present {
-		t.Errorf("wanted NewMetricsAspect(env, conf, metrics) to log template error containing '%s', only got logs: %v", name, logs)
-	}
-}
-
-func TestNewMetricsAspect_BadTemplate(t *testing.T) {
-	conf := &config.Params{
-		SubmissionUrl: "1234",
-		Metrics:       map[string]*config.Params_MetricInfo{"badtemplate": {NameTemplate: `{{if 1}}`}},
-	}
-	metrics := map[string]*metric.Type{"badtemplate": {}}
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("NewMetricsAspect(test.NewEnv(t), config, nil) didn't panic")
-		}
-	}()
-
-	info := GetInfo()
-	b := info.NewBuilder().(*builder)
-	b.SetAdapterConfig(conf)
-	b.SetMetricTypes(metrics)
-	if _, err := b.Build(context.Background(), test.NewEnv(t)); err != nil {
-		t.Errorf("NewMetricsAspect(test.NewEnv(t), config, nil) = %v; wanted panic not err", err)
-	}
-	t.Fail()
 }
 
 func TestRecord(t *testing.T) {

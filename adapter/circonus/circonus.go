@@ -17,8 +17,8 @@ package circonus
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"text/template"
+	"os"
+	"path/filepath"
 	"time"
 
 	cgm "github.com/circonus-labs/circonus-gometrics"
@@ -26,26 +26,21 @@ import (
 
 	"istio.io/mixer/adapter/circonus/config"
 	"istio.io/mixer/pkg/adapter"
-	"istio.io/mixer/pkg/pool"
 	"istio.io/mixer/template/metric"
 )
 
 type (
-	info struct {
-		mtype config.Params_MetricInfo_Type
-		tmpl  *template.Template
-	}
-
 	builder struct {
 		adpCfg      *config.Params
 		metricTypes map[string]*metric.Type
 	}
 
 	handler struct {
+		f           *os.File
 		cm          cgm.CirconusMetrics
 		metricTypes map[string]*metric.Type
 		env         adapter.Env
-		templates   map[string]info // metric name => template
+		metrics     map[string]config.Params_MetricInfo_Type
 	}
 )
 
@@ -58,6 +53,7 @@ var _ metric.Handler = &handler{}
 // adapter.HandlerBuilder#Build
 func (b *builder) Build(ctx context.Context, env adapter.Env) (adapter.Handler, error) {
 
+	env.Logger().Errorf("BUILDING  metric")
 	cmc := &cgm.Config{}
 	cmc.CheckManager.Check.SubmissionURL = b.adpCfg.SubmissionUrl
 	cm, err := cgm.NewCirconusMetrics(cmc)
@@ -66,29 +62,16 @@ func (b *builder) Build(ctx context.Context, env adapter.Env) (adapter.Handler, 
 		return nil, err
 	}
 
-	templates := make(map[string]info)
+	metrics := make(map[string]config.Params_MetricInfo_Type)
 	ac := b.adpCfg
-	for metricName, s := range ac.Metrics {
-		def, found := b.metricTypes[metricName]
-		if !found {
-			env.Logger().Infof("template registered for nonexistent metric '%s'", metricName)
-			continue // we don't have a metric that corresponds to this template, skip processing it
-		}
+	for _, metric := range ac.Metrics {
 
-		var t *template.Template
-		if s.NameTemplate != "" {
-			t, _ = template.New(metricName).Parse(s.NameTemplate)
-			if err := t.Execute(ioutil.Discard, def.Dimensions); err != nil {
-				env.Logger().Warningf(
-					"skipping custom metric name for metric '%s', could not satisfy template '%s' with labels '%v': %v",
-					metricName, s, def.Dimensions, err)
-				continue
-			}
-		}
-		templates[metricName] = info{mtype: s.Type, tmpl: t}
+		metrics[metric.Name] = metric.Type
 	}
 
-	return &handler{cm: *cm, metricTypes: b.metricTypes, env: env, templates: templates}, nil
+	var file *os.File
+	file, err = os.Create(b.adpCfg.FilePath)
+	return &handler{cm: *cm, metricTypes: b.metricTypes, env: env, metrics: metrics, f: file}, nil
 }
 
 // adapter.HandlerBuilder#SetAdapterConfig
@@ -98,13 +81,11 @@ func (b *builder) SetAdapterConfig(cfg adapter.Config) {
 
 // adapter.HandlerBuilder#Validate
 func (b *builder) Validate() (ce *adapter.ConfigErrors) {
-
-	ac := b.adpCfg
-	for metricName, s := range ac.Metrics {
-		if _, err := template.New(metricName).Parse(s.NameTemplate); err != nil {
-			ce = ce.Appendf("metricNameTemplateStrings", "failed to parse template '%s' for metric '%s': %v", s, metricName, err)
-		}
+	// Check if the path is valid
+	if _, err := filepath.Abs(b.adpCfg.FilePath); err != nil {
+		ce = ce.Append("file_path", err)
 	}
+
 	return nil
 }
 
@@ -118,31 +99,32 @@ func (b *builder) SetMetricTypes(types map[string]*metric.Type) {
 func (h *handler) HandleMetric(ctx context.Context, insts []*metric.Instance) error {
 	var result *multierror.Error
 
+	panic("HERE")
+	h.env.Logger().Errorf("handling metric")
 	for _, inst := range insts {
 
+		if _, ok := h.metricTypes[inst.Name]; !ok {
+			h.env.Logger().Errorf("Cannot find Type for instance %s", inst.Name)
+			continue
+		}
+		h.f.WriteString(fmt.Sprintf(`HandleMetric invoke for :
+			Instance Name  :'%s'
+			Instance Value : %v,
+			Type           : %v`, inst.Name, *inst, *h.metricTypes[inst.Name]))
+
 		metricName := inst.Name
-		if _, ok := h.metricTypes[metricName]; !ok {
-			result = multierror.Append(result, fmt.Errorf("Cannot find Type for instance %s", metricName))
-			continue
-		}
+		/*		if _, ok := h.metricTypes[metricName]; !ok {
+				result = multierror.Append(result, fmt.Errorf("Cannot find Type for instance %s", metricName))
+				continue
+			}*/
 
-		t, found := h.templates[metricName]
+		metricType, found := h.metrics[metricName]
 		if !found {
-			result = multierror.Append(result, fmt.Errorf("no info for metric named %s", metricName))
+			result = multierror.Append(result, fmt.Errorf("no type for metric named %s", metricName))
 			continue
 		}
 
-		if t.tmpl != nil {
-			buf := pool.GetBuffer()
-			// We don't check the error here because Execute should only fail when the template is invalid; since
-			// we check that the templates are parsable in ValidateConfig and further check that they can be executed
-			// with the metric's labels in NewMetricsAspect, this should never fail.
-			_ = t.tmpl.Execute(buf, inst.Dimensions)
-			metricName = buf.String()
-			pool.PutBuffer(buf)
-		}
-
-		switch t.mtype {
+		switch metricType {
 
 		case config.GAUGE:
 			v, ok := inst.Value.(int64)
@@ -180,7 +162,10 @@ func (h *handler) HandleMetric(ctx context.Context, insts []*metric.Instance) er
 }
 
 // adapter.Handler#Close
-func (h *handler) Close() error { return nil }
+func (h *handler) Close() error {
+	return h.f.Close()
+	//return nil
+}
 
 ////////////////// Bootstrap //////////////////////////
 // GetInfo returns the adapter.Info specific to this adapter.
