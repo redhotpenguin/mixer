@@ -22,7 +22,7 @@ import (
 	cgm "github.com/circonus-labs/circonus-gometrics"
 	descriptor "istio.io/api/mixer/v1/config/descriptor"
 	"istio.io/mixer/adapter/circonus/config"
-	//	"istio.io/mixer/pkg/adapter"
+	//"istio.io/mixer/pkg/adapter"
 	"istio.io/mixer/pkg/adapter/test"
 	"istio.io/mixer/template/metric"
 )
