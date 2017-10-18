@@ -17,8 +17,8 @@ package circonus
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
+	//	"log"
+	//"os"
 	"time"
 
 	cgm "github.com/circonus-labs/circonus-gometrics"
@@ -36,7 +36,6 @@ type (
 	}
 
 	handler struct {
-		f           *os.File
 		cm          cgm.CirconusMetrics
 		metricTypes map[string]*metric.Type
 		env         adapter.Env
@@ -53,9 +52,10 @@ var _ metric.Handler = &handler{}
 // adapter.HandlerBuilder#Build
 func (b *builder) Build(ctx context.Context, env adapter.Env) (adapter.Handler, error) {
 
-	env.Logger().Errorf("BUILDING  metric")
 	cmc := &cgm.Config{}
 	cmc.CheckManager.Check.SubmissionURL = b.adpCfg.SubmissionUrl
+	cmc.Debug = true
+	//	cmc.Log = log.New(os.Stdout, "", 1)
 	cm, err := cgm.NewCirconusMetrics(cmc)
 	if err != nil {
 		err = env.Logger().Errorf("Could not create NewCirconusMetrics: %v", err)
@@ -68,10 +68,7 @@ func (b *builder) Build(ctx context.Context, env adapter.Env) (adapter.Handler, 
 
 		metrics[metric.Name] = metric.Type
 	}
-
-	var file *os.File
-	file, err = os.Create(b.adpCfg.FilePath)
-	return &handler{cm: *cm, metricTypes: b.metricTypes, env: env, metrics: metrics, f: file}, nil
+	return &handler{cm: *cm, metricTypes: b.metricTypes, env: env, metrics: metrics}, nil
 }
 
 // adapter.HandlerBuilder#SetAdapterConfig
@@ -81,11 +78,6 @@ func (b *builder) SetAdapterConfig(cfg adapter.Config) {
 
 // adapter.HandlerBuilder#Validate
 func (b *builder) Validate() (ce *adapter.ConfigErrors) {
-	// Check if the path is valid
-	if _, err := filepath.Abs(b.adpCfg.FilePath); err != nil {
-		ce = ce.Append("file_path", err)
-	}
-
 	return nil
 }
 
@@ -99,7 +91,6 @@ func (b *builder) SetMetricTypes(types map[string]*metric.Type) {
 func (h *handler) HandleMetric(ctx context.Context, insts []*metric.Instance) error {
 	var result *multierror.Error
 
-	panic("HERE")
 	h.env.Logger().Errorf("handling metric")
 	for _, inst := range insts {
 
@@ -107,16 +98,11 @@ func (h *handler) HandleMetric(ctx context.Context, insts []*metric.Instance) er
 			h.env.Logger().Errorf("Cannot find Type for instance %s", inst.Name)
 			continue
 		}
-		h.f.WriteString(fmt.Sprintf(`HandleMetric invoke for :
-			Instance Name  :'%s'
-			Instance Value : %v,
-			Type           : %v`, inst.Name, *inst, *h.metricTypes[inst.Name]))
-
 		metricName := inst.Name
-		/*		if _, ok := h.metricTypes[metricName]; !ok {
-				result = multierror.Append(result, fmt.Errorf("Cannot find Type for instance %s", metricName))
-				continue
-			}*/
+		if _, ok := h.metricTypes[metricName]; !ok {
+			result = multierror.Append(result, fmt.Errorf("Cannot find Type for instance %s", metricName))
+			continue
+		}
 
 		metricType, found := h.metrics[metricName]
 		if !found {
@@ -163,8 +149,7 @@ func (h *handler) HandleMetric(ctx context.Context, insts []*metric.Instance) er
 
 // adapter.Handler#Close
 func (h *handler) Close() error {
-	return h.f.Close()
-	//return nil
+	return nil
 }
 
 ////////////////// Bootstrap //////////////////////////
@@ -176,9 +161,7 @@ func GetInfo() adapter.Info {
 		SupportedTemplates: []string{
 			metric.TemplateName,
 		},
-		NewBuilder: func() adapter.HandlerBuilder { return &builder{} },
-		DefaultConfig: &config.Params{
-			SubmissionUrl: "",
-		},
+		NewBuilder:    func() adapter.HandlerBuilder { return &builder{} },
+		DefaultConfig: &config.Params{SubmissionUrl: ""},
 	}
 }
