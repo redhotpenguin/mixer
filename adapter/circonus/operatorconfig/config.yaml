@@ -3,7 +3,7 @@ apiVersion: "config.istio.io/v1alpha2"
 kind: metric
 metadata:
  name: requestcount
- namespace: istio-config-default
+ namespace: istio-system
 spec:
  value: "1"
  dimensions:
@@ -15,29 +15,27 @@ spec:
    response_code: response.code | 200
  monitored_resource_type: '"UNSPECIFIED"'
 ---
-# handler configuration for Adapter 'metric'
+# handler configuration for adapter 'metric'
 apiVersion: "config.istio.io/v1alpha2"
 kind: circonus
 metadata:
  name: hndlrTest
- namespace: istio-config-default
+ namespace: istio-system
 spec:
-  file_path: "out.txt"
-  submission_url: "https://10.20.30.56:43191/module/httptrap/59e7502b-3401-4d05-8862-9a396fab41bf/mys3cr3t"
-  metrics:
-   - name: requestcount.metric.istio-config-default
-     type: COUNTER
-
+ submission_url: ""
+ metrics:
+ - name: requestcount.metric.istio-system
+   type: COUNTER
+---
 # rule to dispatch to your handler
 apiVersion: "config.istio.io/v1alpha2"
 kind: rule
 metadata:
  name: mysamplerule
- namespace: istio-config-default
+ namespace: istio-system
 spec:
  match: "true"
  actions:
  - handler: hndlrTest.circonus
    instances:
    - requestcount.metric
-
