@@ -133,7 +133,7 @@ http_file(
 
 go_repository(
     name = "com_github_circonuslabs_circonus_gometrics",
-    commit = "3be4af140156ebe726078c5b4b04c3a2708e228f", # Oct 2, 2017
+    commit = "ee5536e3086c87248833c21651e1fc59fd9395e6", # Oct 12, 2017
     importpath = "github.com/circonus-labs/circonus-gometrics",
 )
 
