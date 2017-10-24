@@ -15,18 +15,111 @@ package circonus
 
 import (
 	"context"
-	"strings"
+	"io"
+	"log"
+	"os"
+	"path"
 	"testing"
-	"time"
 
-	cgm "github.com/circonus-labs/circonus-gometrics"
-	descriptor "istio.io/api/mixer/v1/config/descriptor"
-	"istio.io/mixer/adapter/circonus/config"
-	//"istio.io/mixer/pkg/adapter"
-	"istio.io/mixer/pkg/adapter/test"
-	"istio.io/mixer/template/metric"
+	"github.com/pborman/uuid"
+
+	mixerapi "istio.io/api/mixer/v1"
+	"istio.io/mixer/pkg/adapter"
+	"istio.io/mixer/template"
+	"istio.io/mixer/test/testenv"
 )
 
+func TestCirconusAdapter(t *testing.T) {
+	configStore, err := buildConfigStore([]string{
+		"../../testdata/config/attributes.yaml",
+		"../../testdata/config/circonus.yaml",
+	})
+	if err != nil {
+		t.Fatal("fail to build test config store: %v", err)
+	}
+
+	var args = testenv.Args{
+		// Start Mixer server on a free port on the loop back interface
+		MixerServerAddr:               `127.0.0.1:0`,
+		ConfigStoreURL:                `fs://` + configStore,
+		ConfigStore2URL:               `fs://` + configStore,
+		ConfigDefaultNamespace:        "istio-system",
+		ConfigIdentityAttribute:       "destination.service",
+		ConfigIdentityAttributeDomain: "svc.cluster.local",
+		UseAstEvaluator:               true,
+	}
+
+	// create a mixer test server and launch it
+	env, err := testenv.NewEnv(&args, template.SupportedTmplInfo, []adapter.InfoFn{GetInfo})
+	if err != nil {
+		t.Fatal("fail to create testenv: %v", err)
+	}
+
+	defer closeHelper(env)
+
+	// create a mixer test client
+	client, conn, err := env.CreateMixerClient()
+	if err != nil {
+		t.Fatal("fail to create client connection: %v", err)
+	}
+	defer closeHelper(conn)
+
+	// make a test request, interrogate the server circonus gometrics client to
+	// see if the expected metrics were emitted
+	request := mixerapi.CheckRequest{}
+	response, err := client.Check(context.Background(), &request)
+	if err != nil {
+		t.Errorf("fail to send check to Mixer %v", err)
+	}
+
+	t.Errorf("got response %v", response)
+}
+
+func buildConfigStore(relativePaths []string) (string, error) {
+	currentPath, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	configPath := path.Join(currentPath, uuid.New())
+	if err = os.Mkdir(configPath, os.ModePerm); err != nil {
+		return "", err
+	}
+
+	for _, filePath := range relativePaths {
+		err = copyFile(path.Join(configPath, path.Base(filePath)), path.Join(currentPath, filePath))
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return configPath, nil
+}
+
+func copyFile(dest, src string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+
+	defer closeHelper(in)
+	out, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer closeHelper(out)
+	_, err = io.Copy(out, in)
+	return err
+}
+
+func closeHelper(c io.Closer) {
+	err := c.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+/*
 func TestNewMetricsAspect(t *testing.T) {
 	name := "SubmissionUrl"
 	conf := &config.Params{
@@ -160,18 +253,7 @@ func TestRecord(t *testing.T) {
 		if c.errString != "" {
 			continue
 		}
-		/*
-			metrics := rs.GetSent()
-			for _, val := range c.vals {
-				name := val.Definition.Name
-				if val.Definition.Name == templateMetricName {
-					name = expectedMetricName
-				}
-				m := metrics.CollectNamed(name)
-				if len(m) < 1 {
-					t.Errorf("[%d] metrics.CollectNamed(%s) returned no stats, expected one.\nHave metrics: %v", idx, name, metrics)
-				}
-			}
-		*/
 	}
 }
+
+*/
