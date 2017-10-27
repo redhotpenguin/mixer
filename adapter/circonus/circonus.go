@@ -55,6 +55,7 @@ func (b *builder) Build(ctx context.Context, env adapter.Env) (adapter.Handler, 
 	cmc := &cgm.Config{}
 	cmc.CheckManager.Check.SubmissionURL = b.adpCfg.SubmissionUrl
 	cmc.Debug = true
+	cmc.Interval = "0"
 	//	cmc.Log = log.New(os.Stdout, "", 1)
 	cm, err := cgm.NewCirconusMetrics(cmc)
 	if err != nil {
@@ -144,6 +145,7 @@ func (h *handler) HandleMetric(ctx context.Context, insts []*metric.Instance) er
 		}
 
 	}
+	h.env.ScheduleWork(h.cm.Flush)
 	return result.ErrorOrNil()
 }
 
