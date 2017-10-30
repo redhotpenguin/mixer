@@ -43,7 +43,5 @@ message Params {
         Type type = 2;
     }
 
-    string file_path = 2;
-
-   repeated MetricInfo metrics = 3;
+   repeated MetricInfo metrics = 2;
 }

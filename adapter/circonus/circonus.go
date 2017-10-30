@@ -17,12 +17,10 @@ package circonus
 import (
 	"context"
 	"fmt"
-	//	"log"
-	//"os"
 	"time"
 
 	cgm "github.com/circonus-labs/circonus-gometrics"
-	multierror "github.com/hashicorp/go-multierror"
+	"github.com/hashicorp/go-multierror"
 
 	"istio.io/mixer/adapter/circonus/config"
 	"istio.io/mixer/pkg/adapter"
@@ -56,7 +54,6 @@ func (b *builder) Build(ctx context.Context, env adapter.Env) (adapter.Handler, 
 	cmc.CheckManager.Check.SubmissionURL = b.adpCfg.SubmissionUrl
 	cmc.Debug = true
 	cmc.Interval = "0"
-	//	cmc.Log = log.New(os.Stdout, "", 1)
 	cm, err := cgm.NewCirconusMetrics(cmc)
 	if err != nil {
 		err = env.Logger().Errorf("Could not create NewCirconusMetrics: %v", err)
@@ -92,15 +89,10 @@ func (b *builder) SetMetricTypes(types map[string]*metric.Type) {
 func (h *handler) HandleMetric(ctx context.Context, insts []*metric.Instance) error {
 	var result *multierror.Error
 
-	h.env.Logger().Errorf("handling metric")
 	for _, inst := range insts {
 
-		if _, ok := h.metricTypes[inst.Name]; !ok {
-			h.env.Logger().Errorf("Cannot find Type for instance %s", inst.Name)
-			continue
-		}
 		metricName := inst.Name
-		if _, ok := h.metricTypes[metricName]; !ok {
+		if _, ok := h.metrics[metricName]; !ok {
 			result = multierror.Append(result, fmt.Errorf("Cannot find Type for instance %s", metricName))
 			continue
 		}
@@ -114,28 +106,34 @@ func (h *handler) HandleMetric(ctx context.Context, insts []*metric.Instance) er
 		switch metricType {
 
 		case config.GAUGE:
-			v, ok := inst.Value.(int64)
+
+			v, ok := inst.Value.(float64)
+
 			if !ok {
-				result = multierror.Append(result, fmt.Errorf("could not record gauge '%s': %v", metricName, inst.Value))
+				result = multierror.Append(result, fmt.Errorf("could not record gauge '%v': %v, %v", metricName, inst.Value, v))
 				continue
 			}
 			h.cm.Gauge(metricName, v)
 
 		case config.COUNTER:
-			_, ok := inst.Value.(int64)
+			value, ok := inst.Value.(int64)
+
 			if !ok {
-				result = multierror.Append(result, fmt.Errorf("could not record counter '%s': %v", metricName, inst.Value))
+				result = multierror.Append(result, fmt.Errorf("could not record counter '%s': %v, %v", metricName, inst.Value, value))
 				continue
 			}
-			h.cm.Increment(metricName)
+
+			h.cm.IncrementByValue(metricName, uint64(value))
 
 		case config.DISTRIBUTION:
 			v, ok := inst.Value.(time.Duration)
+
 			if ok {
 				h.cm.Timing(metricName, float64(v))
 				continue
 			}
-			vint, ok := inst.Value.(int64)
+
+			vint, ok := inst.Value.(float64)
 			if ok {
 				h.cm.Timing(metricName, float64(vint))
 				continue
@@ -146,7 +144,9 @@ func (h *handler) HandleMetric(ctx context.Context, insts []*metric.Instance) er
 
 	}
 	h.env.ScheduleWork(h.cm.Flush)
-	return result.ErrorOrNil()
+
+	theReturn := result.ErrorOrNil()
+	return theReturn
 }
 
 // adapter.Handler#Close

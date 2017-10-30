@@ -67,15 +67,15 @@ metadata:
  name: hndlrTest
  namespace: istio-system
 spec:
- submission_url: ""
+ submission_url: "https://submissionurl.circonus"
  metrics:
- - name: requestcount.metric.istio-system
-   type: COUNTER
- - name: requestduration.metric.istio-system
+  requestcount.metric.istio-system:
+    type: COUNTER
+  requestduration.metric.istio-system:
    type: DISTRIBUTION
- - name: requestsize.metric.istio-system
+  requestsize.metric.istio-system:
    type: GAUGE
- - name: responsesize.metric.istio-system
+  responsesize.metric.istio-system:
    type: GAUGE
 ---
 # rule to dispatch to your handler

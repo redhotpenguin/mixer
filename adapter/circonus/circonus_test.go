@@ -7,36 +7,57 @@
 //     http://www.apache.org/licenses/LICENSE-2.0
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY Type, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
 package circonus
 
 import (
-	"context"
-	"strings"
 	"testing"
-	"time"
-	"fmt"
-
 	cgm "github.com/circonus-labs/circonus-gometrics"
 
+	"golang.org/x/net/context"
+
 	"istio.io/mixer/adapter/circonus/config"
-	"istio.io/mixer/pkg/adapter/test"
 	"istio.io/mixer/template/metric"
+	"istio.io/mixer/pkg/adapter/test"
 )
 
-func TestRecord(t *testing.T) {
-
-	conf := &config.Params{
-		SubmissionUrl: "http://fakeurl",
-		Metrics: []*config.Params_MetricInfo{
-			{Name: "counter", Type: config.COUNTER},
-			{Name: "distribution", Type: config.DISTRIBUTION},
-			{Name: "gauge", Type: config.GAUGE},
-		},
+var (
+	counterInfo = &config.Params_MetricInfo{
+		Name: "the.counter",
+		Type: config.COUNTER,
 	}
+
+	counterInstance = &metric.Instance{
+		Name:  counterInfo.Name,
+		Value: int64(456),
+	}
+
+	histogramInfo = &config.Params_MetricInfo{
+		Name: "happy_histogram",
+		Type: config.DISTRIBUTION,
+	}
+
+	histogramInstance = &metric.Instance{
+		Name:  histogramInfo.Name,
+		Value: float64(234.23),
+	}
+
+	histogramValSerialized = "H[2.3e+02]=1"
+
+	gaugeInfo = &config.Params_MetricInfo{
+		Name: "/funky::gauge",
+		Type: config.GAUGE,
+	}
+	gaugeInstance = &metric.Instance{
+		Name:  gaugeInfo.Name,
+		Value: float64(123.45),
+	}
+)
+
+func TestCirconusHandleMetrics(t *testing.T) {
 
 	metrics := map[string]*metric.Type{
 		"counter":      {},
@@ -44,104 +65,100 @@ func TestRecord(t *testing.T) {
 		"gauge":        {},
 	}
 
-
-	validGauge := metric.Instance{
-		Name: "gauge",
-		Value: int64(123),
-		Dimensions: make(map[string]interface{}),
-	}
-	invalidGauge := validGauge
-	invalidGauge.Value = "bar"
-
-
-	validCounter := metric.Instance{
-		Name: "counter",
-		Value: int64(123),
-		Dimensions: make(map[string]interface{}),
-	}
-	invalidCounter := validCounter
-	invalidCounter.Value = 1.0
-
-	requestDuration := &metric.Instance{
-		Name: "histogram",
-		Value: 146 * time.Millisecond,
-	}
-	invalidDistribution := &metric.Instance{
-		Name: "histogram",
-		Value: "not good",
-		}
-	int64Distribution := &metric.Instance{
-		Name: "histogram",
-		Value: int64(3459),
-	}
-
-	cases := []struct {
-		vals      []*metric.Instance
-		errString string
-	}{
-		{[]*metric.Instance{}, ""},
-		{[]*metric.Instance{&validGauge}, ""},
-		{[]*metric.Instance{&validCounter}, ""},
-		{[]*metric.Instance{requestDuration}, ""},
-		{[]*metric.Instance{int64Distribution}, ""},
-		{[]*metric.Instance{&validCounter, &validGauge}, ""},
-		{[]*metric.Instance{&validCounter, &validGauge}, ""},
-		{[]*metric.Instance{&invalidCounter}, "could not record"},
-		{[]*metric.Instance{&invalidGauge}, "could not record"},
-		{[]*metric.Instance{invalidDistribution}, "could not record"},
-		{[]*metric.Instance{&validGauge, &invalidGauge}, "could not record"},
-	}
-
+	// create a circonus gometrics instance
 	submissionURL := "http://fake.url"
 	cmc := &cgm.Config{}
 	cmc.CheckManager.Check.SubmissionURL = submissionURL
 	cmc.Debug = true
+	cmc.Interval = "0"
 	cm, err := cgm.NewCirconusMetrics(cmc)
 	if err != nil {
 		t.Errorf("could not create new cgm %v", err)
 	}
 
+	tests := []struct {
+		name    string
+		metrics []*config.Params_MetricInfo
+		values  []*metric.Instance
+	}{
+		{"Counter",
+			[]*config.Params_MetricInfo{counterInfo},
+			[]*metric.Instance{counterInstance}},
+		{"Gauge",
+			[]*config.Params_MetricInfo{gaugeInfo},
+			[]*metric.Instance{gaugeInstance}},
+		{"Histogram", []*config.Params_MetricInfo{histogramInfo}, []*metric.Instance{histogramInstance}},
+	}
 
-	for idx, c := range cases {
+	for _, v := range tests {
 
-		t.Run(fmt.Sprintf("%d", idx), func(t *testing.T) {
-			//info := GetInfo()
+		t.Run(v.name, func(t *testing.T) {
+
 			builder := GetInfo().NewBuilder().(*builder)
-			builder.SetAdapterConfig(conf)
+			builder.SetAdapterConfig(makeConfig(v.metrics...))
 			builder.SetMetricTypes(metrics)
 
 			metricsHandler, err := builder.Build(context.Background(), test.NewEnv(t))
 			if err != nil {
-				t.Fatal("failed to build metrics handler: %s", err)
+				t.Fatal("Build() returned error: %v", err)
 			}
-
-			//cm := &CirconusMetrics{gauges: make(map[string]string), counters: make(map[string]uint64), histograms: make(map[string]*Histogram)}
 
 			handler := metricsHandler.(*handler)
 			handler.cm = *cm
 
-			if err := handler.HandleMetric(context.Background(), c.vals); err != nil {
-				if c.errString == "" {
-					t.Errorf("HandleMetric returned error: %s", err)
-				}
-				if !strings.Contains(err.Error(), c.errString) {
-					t.Errorf("HandleMetric returned error: %s; wanted err containing %s", err.Error(), c.errString)
-				}
+			if err = handler.HandleMetric(context.Background(), v.values); err != nil {
+				t.Errorf("HandleMetric() returned error: %v", err)
 			}
 
 			if err := handler.Close(); err != nil {
-				t.Errorf("handler.Close() returned error: %s", err)
+				t.Errorf("Close() returned error: %v", err)
 			}
 
-			if c.errString != "" {
-				return
+			for _, adapterVal := range v.values {
+				mType, ok := handler.metrics[adapterVal.Name]
+				if !ok {
+					t.Errorf("no metric with name: %v, %d", adapterVal.Name, mType)
+				}
+
+				switch mType {
+				case config.COUNTER:
+
+					val, err := cm.GetCounterTest(counterInfo.Name)
+					if err != nil {
+						t.Errorf("error in GetCounterTest: %v", err)
+					}
+					if int64(val) != counterInstance.Value {
+						t.Errorf("Expected counter value %v, got %v", counterInstance.Value, val)
+					}
+
+				case config.GAUGE:
+
+					val, err := cm.GetGaugeTest(gaugeInfo.Name)
+					if err != nil {
+						t.Errorf("error in GetGaugeTest: %v", err)
+					}
+					if val != gaugeInstance.Value {
+						t.Errorf("Expected gauge value %v, got %v", gaugeInstance.Value, val)
+					}
+
+				case config.DISTRIBUTION:
+
+					val, err := cm.GetHistogramTest(histogramInfo.Name)
+					if err != nil {
+						t.Errorf("error in GetHistogramTest: %v", err)
+					}
+					if val[0] != histogramValSerialized {
+						t.Errorf("Expected histogram value %v, got %v", histogramInstance.Value, val[0])
+					}
+				}
 			}
-
-//			for _, val := range c.vals {
-				//name := val.Name
-
-//			}
-			// check cgm metric value here
 		})
 	}
+}
+
+func
+makeConfig(metrics ... *config.Params_MetricInfo) *config.Params {
+	return &config.Params{
+		SubmissionUrl: "http://fakeurl",
+		Metrics:       metrics}
 }
