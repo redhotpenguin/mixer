@@ -1,4 +1,3 @@
-# instance configuration for template 'metric'
 apiVersion: "config.istio.io/v1alpha2"
 kind: metric
 metadata:
@@ -60,22 +59,59 @@ spec:
     response_code: response.code | 200
   monitored_resource_type: '"UNSPECIFIED"'
 ---
+apiVersion: "config.istio.io/v1alpha2"
+kind: metric
+metadata:
+  name: tcpbytesreceived
+  namespace: istio-system
+  labels:
+    istio-protocol: tcp # needed so that mixer will only generate when context.protocol == tcp
+spec:
+  value: connection.received.bytes | 0
+  dimensions:
+    source_service: source.service | "unknown"
+    source_version: source.labels["version"] | "unknown"
+    destination_service: destination.service | "unknown"
+    destination_version: destination.labels["version"] | "unknown"
+  monitored_resource_type: '"UNSPECIFIED"'
+---
+apiVersion: "config.istio.io/v1alpha2"
+kind: metric
+metadata:
+  name: tcpbytesent
+  namespace: istio-system
+  labels:
+    istio-protocol: tcp # needed so that mixer will only generate when context.protocol == tcp
+spec:
+  value: connection.sent.bytes | 0
+  dimensions:
+    source_service: source.service | "unknown"
+    source_version: source.labels["version"] | "unknown"
+    destination_service: destination.service | "unknown"
+    destination_version: destination.labels["version"] | "unknown"
+  monitored_resource_type: '"UNSPECIFIED"'
+---
 # handler configuration for adapter 'metric'
 apiVersion: "config.istio.io/v1alpha2"
 kind: circonus
 metadata:
- name: hndlrTest
+ name: handler
  namespace: istio-system
 spec:
- submission_url: "https://submissionurl.circonus"
+ # HTTPTrap url
+ submission_url: "http://circonus.submission.url"
  metrics:
-  requestcount.metric.istio-system:
-    type: COUNTER
-  requestduration.metric.istio-system:
+ - name: requestcount.metric.istio-system
+   type: COUNTER
+ - name: requestduration.metric.istio-system
    type: DISTRIBUTION
-  requestsize.metric.istio-system:
+ - name: requestsize.metric.istio-system
    type: GAUGE
-  responsesize.metric.istio-system:
+ - name: responsesize.metric.istio-system
+   type: GAUGE
+ - name: tcpbytesent.metric.istio-system
+   type: GAUGE
+ - name: tcpbytesreceived.metric.istio-system
    type: GAUGE
 ---
 # rule to dispatch to your handler
@@ -87,10 +123,12 @@ metadata:
 spec:
  match: "true"
  actions:
- - handler: hndlrTest.circonus
+ - handler: handler.circonus
    instances:
    - requestcount.metric
    - requestduration.metric
    - requestsize.metric
    - responsesize.metric
+   - tcpbytesent.metric
+   - tcpbytesreceived.metric
 ---
