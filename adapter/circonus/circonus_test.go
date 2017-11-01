@@ -53,7 +53,7 @@ var (
 	}
 	gaugeInstance = &metric.Instance{
 		Name:  gaugeInfo.Name,
-		Value: float64(123.45),
+		Value: int64(123),
 	}
 )
 
