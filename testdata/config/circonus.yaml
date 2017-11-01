@@ -1,0 +1,97 @@
+apiVersion: "config.istio.io/v1alpha2"
+kind: metric
+metadata:
+ name: requestcount
+ namespace: istio-system
+spec:
+ value: "1"
+ dimensions:
+   source: source.labels["app"] | "unknown"
+   target: target.service | "unknown"
+   service: target.labels["app"] | "unknown"
+   method: request.path | "unknown"
+   version: target.labels["version"] | "unknown"
+   response_code: response.code | 200
+ monitored_resource_type: '"UNSPECIFIED"'
+---
+apiVersion: "config.istio.io/v1alpha2"
+kind: metric
+metadata:
+  name: requestduration
+  namespace: istio-system
+spec:
+  value: response.duration | "0ms"
+  dimensions:
+    source_service: source.service | "unknown"
+    source_version: source.labels["version"] | "unknown"
+    destination_service: destination.service | "unknown"
+    destination_version: destination.labels["version"] | "unknown"
+    response_code: response.code | 200
+  monitored_resource_type: '"UNSPECIFIED"'
+---
+apiVersion: "config.istio.io/v1alpha2"
+kind: metric
+metadata:
+  name: requestsize
+  namespace: istio-system
+spec:
+  value: request.size | 0
+  dimensions:
+    source_service: source.service | "unknown"
+    source_version: source.labels["version"] | "unknown"
+    destination_service: destination.service | "unknown"
+    destination_version: destination.labels["version"] | "unknown"
+    response_code: response.code | 200
+  monitored_resource_type: '"UNSPECIFIED"'
+---
+apiVersion: "config.istio.io/v1alpha2"
+kind: metric
+metadata:
+  name: responsesize
+  namespace: istio-system
+spec:
+  value: response.size | 0
+  dimensions:
+    source_service: source.service | "unknown"
+    source_version: source.labels["version"] | "unknown"
+    destination_service: destination.service | "unknown"
+    destination_version: destination.labels["version"] | "unknown"
+    response_code: response.code | 200
+  monitored_resource_type: '"UNSPECIFIED"'
+---
+apiVersion: "config.istio.io/v1alpha2"
+kind: circonus
+metadata:
+ name: handler
+ namespace: istio-system
+spec:
+ submission_url: "https://fakesubmissionurl"
+ metrics:
+ - name: requestcount.metric.istio-system
+   type: COUNTER
+ - name: requestduration.metric.istio-system
+   type: DISTRIBUTION
+ - name: requestsize.metric.istio-system
+   type: GAUGE
+ - name: responsesize.metric.istio-system
+   type: GAUGE
+ - name: tcpbytesent.metric.istio-system
+   type: GAUGE
+ - name: tcpbytesreceived.metric.istio-system
+   type: GAUGE
+---
+apiVersion: "config.istio.io/v1alpha2"
+kind: rule
+metadata:
+ name: circonushttp
+ namespace: istio-system
+spec:
+ match: "true"
+ actions:
+ - handler: handler.circonus
+   instances:
+   - requestcount.metric
+   - requestduration.metric
+   - requestsize.metric
+   - responsesize.metric
+---
