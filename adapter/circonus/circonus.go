@@ -107,7 +107,7 @@ func (h *handler) HandleMetric(ctx context.Context, insts []*metric.Instance) er
 
 		case config.GAUGE:
 
-			v, ok := inst.Value.(float64)
+			v, ok := inst.Value.(int64)
 
 			if !ok {
 				result = multierror.Append(result, fmt.Errorf("could not record gauge '%v': %v, %v", metricName, inst.Value, v))
